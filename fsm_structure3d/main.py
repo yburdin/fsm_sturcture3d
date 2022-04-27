@@ -61,6 +61,7 @@ class Analysis:
 
         self.bb_diagonal = None
 
+        self.signature_raw = None
         self.signature = None
         self.curve = None
         self.shapes = None
@@ -99,6 +100,16 @@ class Analysis:
          self.csp.inertia_moment_y, self.csp.inertia_moment_u, self.csp.inertia_moment_v,
          ) = [data["Cross section"][x] for x in ['cx', 'cy', 'x0', 'y0', 'phi', 'A',
                                                  'Ixx', 'Ixy', 'Iyy', 'I11', 'I22']]
+
+    @staticmethod
+    def moving_average(data, average_range=7):
+        if type(data) is not list:
+            data = list(data)
+
+            new_data = [data[0]] * ((average_range - 1) // 2) + data + [data[-1]] * ((average_range - 1) // 2)
+            result_data = [sum(new_data[n:n + average_range]) / average_range for n in
+                           range(len(new_data) - average_range + 1)]
+            return result_data
 
     def cufsm(self, cufsm_type='signature'):
         # No special springs or constraints
@@ -172,7 +183,7 @@ class Analysis:
 
         # Perform the Finite Strip Method analysis
         if cufsm_type == 'signature':
-            self.signature, self.curve, self.shapes = strip(
+            self.signature_raw, self.curve, self.shapes = strip(
                 props=self.material.props,
                 nodes=nodes_p,
                 elements=self.elements,
@@ -205,6 +216,9 @@ class Analysis:
             raise Exception('CUFSM type error')
 
     def critical_stresses(self):
+        # Усреднение сигнатурной кривой
+        self.signature = self.moving_average(self.signature_raw)
+
         # Расчет производных
         self.sc_derivative = []
         for i in range(len(self.lengths) - 1):
@@ -275,12 +289,14 @@ class Analysis:
             f.write(json.dumps(
                 {'Lengths': list(self.lengths),
                  'Signature curve': list(self.signature),
+                 'Signature curve unaveraged': list(self.signature_raw),
                  'Critical moment curve': list(self.critical_moment),
                  'Shapes': [shape.reshape(1, -1)[0].tolist() for shape in self.shapes],
                  'Critical stress': list(self.sigma_cr),
                  'Critical length': list(self.length_cr),
                  'Critical indices': list(self.index_cr),
-                 }
+                 },
+                indent=4,
             ))
 
 
@@ -292,10 +308,15 @@ if __name__ == "__main__":
         analysis = Analysis()
 
         analysis.import_data(input_path)
+        print('Import - OK')
+
         analysis.cufsm()
         analysis.critical_stresses()
         analysis.cufsm(cufsm_type='critical moment')
+        print('CUFSM - OK')
+
         analysis.export_results(output_path)
+        print('Export - OK')
 
     except IndexError:
         print('No path provided')
