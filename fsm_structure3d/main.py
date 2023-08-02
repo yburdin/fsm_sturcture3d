@@ -268,11 +268,12 @@ class Analysis:
                     break
 
             # ... по второй производной
-            for i in range(self.index_cr[0], index_of_max):
-                if (np.sign(self.sc_derivative_2[i]) != np.sign(self.sc_derivative_2[i + 1]) and
-                        np.sign(self.sc_derivative_2[i]) == -1 and self.lengths[i] < 20 * self.bb_diagonal):
-                    self.index_cr.append(i + 1)
-                    break
+            if len(self.index_cr) == 1:
+                for i in range(self.index_cr[0], index_of_max):
+                    if (np.sign(self.sc_derivative_2[i]) != np.sign(self.sc_derivative_2[i + 1]) and
+                            np.sign(self.sc_derivative_2[i]) == -1 and self.lengths[i] < 20 * self.bb_diagonal):
+                        self.index_cr.append(i + 1)
+                        break
 
             if len(self.index_cr) == 1:
                 for i in range(index_of_max, len(self.sc_derivative_2) - 1):
