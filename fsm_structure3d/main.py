@@ -3,6 +3,7 @@ import numpy as np
 import json
 from pycufsm.fsm import strip
 from pycufsm.preprocess import stress_gen
+from typing import Optional
 
 
 class CrossSectionProperties:
@@ -106,10 +107,10 @@ class Analysis:
         if type(data) is not list:
             data = list(data)
 
-            new_data = [data[0]] * ((average_range - 1) // 2) + data + [data[-1]] * ((average_range - 1) // 2)
-            result_data = [sum(new_data[n:n + average_range]) / average_range for n in
-                           range(len(new_data) - average_range + 1)]
-            return result_data
+        new_data = [data[0]] * ((average_range - 1) // 2) + data + [data[-1]] * ((average_range - 1) // 2)
+        result_data = [sum(new_data[n:n + average_range]) / average_range for n in
+                       range(len(new_data) - average_range + 1)]
+        return result_data
 
     def cufsm(self, cufsm_type='signature'):
         # No special springs or constraints
@@ -235,11 +236,10 @@ class Analysis:
 
         # Поиск локальной потери устойчивости
         # ... по первой производной
-        for i in range(len(self.sc_derivative) - 1):
-            if (np.sign(self.sc_derivative[i]) != np.sign(self.sc_derivative[i + 1]) and
-                    np.sign(self.sc_derivative[i]) == -1 and self.lengths[i] < 1.5 * self.bb_diagonal):
-                self.index_cr.append(i + 1)
-                break
+        local_buckling_index = self.find_local_buckling_index_with_first_derivative(
+            max_length=1.5 * self.bb_diagonal)
+        if local_buckling_index:
+            self.index_cr.append(local_buckling_index)
 
         # ... по второй производной
         if len(self.index_cr) == 0:
@@ -281,6 +281,15 @@ class Analysis:
                         self.index_cr.append(i + 1)
                         break
 
+        # Дополнительная попытка найти критическое напряжение по первой производной с увеличением предельной длины
+        if len(self.index_cr) < 1:
+            for coefficient in np.linspace(1.6, 19.6, 19):
+                local_buckling_index = self.find_local_buckling_index_with_first_derivative(
+                    max_length=coefficient * self.bb_diagonal)
+                if local_buckling_index:
+                    self.index_cr.append(local_buckling_index)
+                    break
+
         self.length_cr = [self.lengths[i] for i in self.index_cr]
         self.sigma_cr = [self.signature[i] for i in self.index_cr]
 
@@ -298,6 +307,19 @@ class Analysis:
                  },
                 indent=4,
             ))
+
+    def find_local_buckling_index_with_first_derivative(
+            self,
+            max_length: float
+    ) -> Optional[int]:
+        index_cr = None
+        for i in range(len(self.sc_derivative) - 1):
+            if (np.sign(self.sc_derivative[i]) != np.sign(self.sc_derivative[i + 1]) and
+                    np.sign(self.sc_derivative[i]) == -1 and self.lengths[i] < max_length):
+                index_cr = i + 1
+                break
+
+        return index_cr
 
 
 if __name__ == "__main__":
